@@ -1,0 +1,8 @@
+[package]
+name = "pb-ebnf"
+version = "0.1.0"
+edition = "2021"
+description = "Express grammars in Extended Backus-Naur Form (EBNF)"
+
+[dependencies]
+pb-ebnf-macros = { path = "./pb-ebnf-macros/" }
