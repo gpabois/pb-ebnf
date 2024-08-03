@@ -26,11 +26,7 @@ impl Parse for Syntax {
         let mut ls = Vec::<Rule>::default();
 
         while !input.is_empty() {
-            ls.push(
-                input
-                    .parse::<Rule>()
-                    .map_err(|_| syn::Error::new(Span::call_site(), "expecting a rule"))?,
-            );
+            ls.push(input.parse::<Rule>()?);
         }
 
         Ok(Self(ls))
@@ -52,24 +48,17 @@ pub struct Rule {
 }
 impl Parse for Rule {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let lhs = input
-            .parse::<Symbol>()
-            .map_err(|_| syn::Error::new(Span::call_site(), "expecting a symbol as rule's lhs"))?;
+        let lhs = input.parse::<Symbol>()?;
 
         input
             .parse::<Token![=]>()
-            .map_err(|_| syn::Error::new(Span::call_site(), "expecting a = after rule's lhs"))?;
+            .map_err(|e| syn::Error::new(e.span(), "expecting a = after rule's lhs"))?;
 
-        let rhs = input.parse::<DefinitionsList>().map_err(|_| {
-            syn::Error::new(
-                Span::call_site(),
-                "expecting a definitions list as rule's rhs",
-            )
-        })?;
+        let rhs = input.parse::<DefinitionsList>()?;
 
         input
             .parse::<Token![;]>()
-            .map_err(|_| syn::Error::new(Span::call_site(), "expecting a ;"))?;
+            .map_err(|e| syn::Error::new(e.span(), "expecting a ;"))?;
 
         Ok(Self { lhs, rhs })
     }
@@ -251,7 +240,7 @@ impl Parse for Primary {
             input.parse::<GroupedSequence>().map(Self::Grouped)
         } else if input.peek(syn::LitStr) {
             input.parse::<Literal>().map(Self::Literal)
-        } else if input.peek(syn::Ident) {
+        } else if input.peek(syn::Ident) || input.peek(Token![<]) {
             input.parse::<Symbol>().map(Self::Symbol)
         } else {
             Ok(Self::Empty)

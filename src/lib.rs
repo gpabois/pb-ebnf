@@ -191,11 +191,25 @@ impl<'a> Symbol<'a> {
         Self(value)
     }
 }
+impl Deref for Symbol<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Literal<'a>(&'a str);
 impl<'a> Literal<'a> {
     pub const fn new(value: &'a str) -> Self {
         Self(value)
+    }
+}
+impl Deref for Literal<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
     }
 }
