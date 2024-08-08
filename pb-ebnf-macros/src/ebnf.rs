@@ -320,6 +320,7 @@ impl Symbol {
             input.peek(Token![as]),
             input.peek(Token![default]),
             input.peek(Token![where]),
+            input.peek(Token![type]),
             input.peek(syn::Ident),
         ]
         .into_iter()
@@ -347,6 +348,9 @@ impl Parse for Symbol {
                 } else if input.peek(Token![default]) {
                     input.parse::<Token![default]>()?;
                     parts.push("default".to_owned());
+                } else if input.peek(Token![type]) {
+                    input.parse::<Token![type]>()?;
+                    parts.push("type".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
                 }
