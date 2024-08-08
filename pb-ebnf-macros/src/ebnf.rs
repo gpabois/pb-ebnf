@@ -240,7 +240,7 @@ impl Parse for Primary {
             input.parse::<GroupedSequence>().map(Self::Grouped)
         } else if input.peek(syn::LitStr) {
             input.parse::<Literal>().map(Self::Literal)
-        } else if input.peek(syn::Ident) || input.peek(Token![<]) {
+        } else if Symbol::is_beginning_of_symbol(&input) {
             input.parse::<Symbol>().map(Self::Symbol)
         } else {
             Ok(Self::Empty)
@@ -311,13 +311,33 @@ impl ToTokens for GroupedSequence {
 }
 
 pub struct Symbol(String);
+impl Symbol {
+    pub fn is_beginning_of_symbol(input: &syn::parse::ParseStream) -> bool {
+        [
+            input.peek(Token![<]),
+            input.peek(Token![self]),
+            input.peek(Token![-]),
+            input.peek(Token![Self]),
+        ]
+        .into_iter()
+        .any(|x| x)
+    }
+}
 impl Parse for Symbol {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.peek(Token![<]) {
             input.parse::<Token![<]>()?;
             let mut parts = Vec::<String>::default();
             while !input.peek(Token![>]) {
-                parts.push(input.parse::<syn::Ident>()?.to_string());
+                if input.peek(Token![-]) {
+                    input.parse::<Token![-]>()?;
+                    parts.push("-".to_owned());
+                } else if input.peek(Token![self]) {
+                    input.parse::<Token![self]>()?;
+                    parts.push("self".to_owned());
+                } else {
+                    parts.push(input.parse::<syn::Ident>()?.to_string());
+                }
             }
             input.parse::<Token![>]>()?;
             Ok(Self(parts.join(" ")))
