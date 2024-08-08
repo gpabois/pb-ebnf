@@ -316,8 +316,11 @@ impl Symbol {
         [
             input.peek(Token![<]),
             input.peek(Token![self]),
-            input.peek(Token![-]),
             input.peek(Token![Self]),
+            input.peek(Token![as]),
+            input.peek(Token![default]),
+            input.peek(Token![where]),
+            input.peek(syn::Ident),
         ]
         .into_iter()
         .any(|x| x)
@@ -335,6 +338,15 @@ impl Parse for Symbol {
                 } else if input.peek(Token![self]) {
                     input.parse::<Token![self]>()?;
                     parts.push("self".to_owned());
+                } else if input.peek(Token![as]) {
+                    input.parse::<Token![as]>()?;
+                    parts.push("as".to_owned());
+                } else if input.peek(Token![where]) {
+                    input.parse::<Token![where]>()?;
+                    parts.push("as".to_owned());
+                } else if input.peek(Token![default]) {
+                    input.parse::<Token![default]>()?;
+                    parts.push("default".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
                 }
