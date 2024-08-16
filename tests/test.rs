@@ -1,7 +1,9 @@
-use pb_ebnf::{DefinitionsList, Rule, Symbol, Syntax};
+use pb_ebnf::{
+    DefinitionsList, DefinitionsListRef, Rule, RuleRef, StaticSyntax, Symbol, SymbolRef,
+};
 use pb_ebnf_macros::ebnf;
 
-const SYNTAX: Syntax<'_> = ebnf! {
+const SYNTAX: StaticSyntax = ebnf! {
     // Rule 1
     syntax = rule_1 | rule_2, rule_3 | rule_4, {",", rule_5};
     <long meta identifier> = rule_1;
@@ -18,7 +20,7 @@ const SYNTAX: Syntax<'_> = ebnf! {
 
 };
 
-pub const SQL: Syntax = ebnf! {
+pub const SQL: StaticSyntax = ebnf! {
     ////////////////////////////////////////
     // 5.2 Tokens and seperators (p. 134) //
     ////////////////////////////////////////
@@ -151,13 +153,13 @@ pub const SQL: Syntax = ebnf! {
 
 #[test]
 fn test_syntax() {
-    let rule = Rule::new(Symbol::new("rule_1"), DefinitionsList::new(&[]));
+    let rule = RuleRef::new(SymbolRef::new("rule_1"), DefinitionsListRef::new(&[]));
 }
 
 #[test]
 fn test_syntax_kernel() {
-    let kernel = SYNTAX[0].kernel().copied().collect::<Vec<_>>();
-    let expected = vec![Symbol::new("rule_1")];
+    let kernel = SYNTAX[0].transitive().copied().collect::<Vec<_>>();
+    let expected = vec![SymbolRef::new("rule_1")];
 
     assert_eq!(expected, kernel);
 }

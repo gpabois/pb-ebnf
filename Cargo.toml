@@ -5,4 +5,5 @@ edition = "2021"
 description = "Express grammars in Extended Backus-Naur Form (EBNF)"
 
 [dependencies]
+pb-ebnf-core = { path = './pb-ebnf-core/' }
 pb-ebnf-macros = { path = "./pb-ebnf-macros/" }
