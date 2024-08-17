@@ -107,6 +107,9 @@ impl syn::parse::Parse for Symbol {
                 } else if input.peek(Token![ref]) {
                     input.parse::<Token![ref]>()?;
                     parts.push("ref".to_owned());
+                } else if input.peek(Token![return]) {
+                    input.parse::<Token![return]>()?;
+                    parts.push("return".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
                 }
