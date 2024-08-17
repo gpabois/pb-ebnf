@@ -95,6 +95,9 @@ impl syn::parse::Parse for Symbol {
                 } else if input.peek(Token![static]) {
                     input.parse::<Token![static]>()?;
                     parts.push("continue".to_owned());
+                } else if input.peek(Token![in]) {
+                    input.parse::<Token![in]>()?;
+                    parts.push("in".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
                 }
