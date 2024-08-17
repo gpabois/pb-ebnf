@@ -47,12 +47,14 @@ impl Symbol {
             input.peek(Token![default]),
             input.peek(Token![where]),
             input.peek(Token![type]),
+            input.peek(Token![match]),
             input.peek(syn::Ident),
         ]
         .into_iter()
         .any(|x| x)
     }
 }
+
 impl syn::parse::Parse for Symbol {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         use syn::Token;
@@ -78,6 +80,18 @@ impl syn::parse::Parse for Symbol {
                 } else if input.peek(Token![type]) {
                     input.parse::<Token![type]>()?;
                     parts.push("type".to_owned());
+                } else if input.peek(Token![match]) {
+                    input.parse::<Token![match]>()?;
+                    parts.push("match".to_owned());
+                } else if input.peek(Token![break]) {
+                    input.parse::<Token![break]>()?;
+                    parts.push("break".to_owned());
+                } else if input.peek(Token![const]) {
+                    input.parse::<Token![const]>()?;
+                    parts.push("break".to_owned());
+                } else if input.peek(Token![const]) {
+                    input.parse::<Token![const]>()?;
+                    parts.push("continue".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
                 }
