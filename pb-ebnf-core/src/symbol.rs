@@ -88,9 +88,12 @@ impl syn::parse::Parse for Symbol {
                     parts.push("break".to_owned());
                 } else if input.peek(Token![const]) {
                     input.parse::<Token![const]>()?;
-                    parts.push("break".to_owned());
-                } else if input.peek(Token![const]) {
-                    input.parse::<Token![const]>()?;
+                    parts.push("const".to_owned());
+                } else if input.peek(Token![continue]) {
+                    input.parse::<Token![continue]>()?;
+                    parts.push("continue".to_owned());
+                } else if input.peek(Token![static]) {
+                    input.parse::<Token![static]>()?;
                     parts.push("continue".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
