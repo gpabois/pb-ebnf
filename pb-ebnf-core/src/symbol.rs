@@ -98,6 +98,12 @@ impl syn::parse::Parse for Symbol {
                 } else if input.peek(Token![in]) {
                     input.parse::<Token![in]>()?;
                     parts.push("in".to_owned());
+                } else if input.peek(Token![if]) {
+                    input.parse::<Token![if]>()?;
+                    parts.push("if".to_owned());
+                } else if input.peek(Token![else]) {
+                    input.parse::<Token![else]>()?;
+                    parts.push("else".to_owned());
                 } else {
                     parts.push(input.parse::<syn::Ident>()?.to_string());
                 }
