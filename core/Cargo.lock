@@ -18,29 +18,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "pb-ebnf"
-version = "0.1.0"
-dependencies = [
- "pb-ebnf-core",
- "pb-ebnf-macros",
-]
-
-[[package]]
 name = "pb-ebnf-core"
 version = "0.1.0"
 dependencies = [
  "itertools",
  "phf",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "pb-ebnf-macros"
-version = "0.1.0"
-dependencies = [
- "pb-ebnf-core",
  "proc-macro2",
  "quote",
  "syn",

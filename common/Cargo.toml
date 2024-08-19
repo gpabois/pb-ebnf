@@ -1,0 +1,8 @@
+[package]
+name = "pb-common-ebnf"
+version = "0.1.0"
+edition = "2021"
+description = "EBNF of some common languages"
+
+[dependencies]
+pb-ebnf = { path = "../" }
