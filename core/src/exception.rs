@@ -1,9 +1,14 @@
 use std::{marker::PhantomData, ops::Deref};
 
-use crate::factor::{FactorRef, OwnedFactor};
+use crate::{
+    factor::{Factor, FactorRef},
+    IFactor,
+};
 
-pub trait Exception: Deref<Target = Self::Factor> {
+pub trait IException: Deref<Target = Self::Factor> {
     type Factor;
+
+    fn to_owned(self) -> Exception;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,8 +20,12 @@ impl<'a> ExceptionRef<'a> {
     }
 }
 
-impl<'a> Exception for ExceptionRef<'a> {
+impl<'a> IException for ExceptionRef<'a> {
     type Factor = FactorRef<'a>;
+
+    fn to_owned(self) -> Exception {
+        Exception(self.0.to_owned())
+    }
 }
 
 impl<'a> Deref for ExceptionRef<'a> {
@@ -28,27 +37,31 @@ impl<'a> Deref for ExceptionRef<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedException(OwnedFactor);
+pub struct Exception(Factor);
 
-impl Exception for OwnedException {
-    type Factor = OwnedFactor;
+impl IException for Exception {
+    type Factor = Factor;
+
+    fn to_owned(self) -> Exception {
+        self
+    }
 }
 
-impl Deref for OwnedException {
-    type Target = OwnedFactor;
+impl Deref for Exception {
+    type Target = Factor;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl syn::parse::Parse for OwnedException {
+impl syn::parse::Parse for Exception {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        input.parse::<OwnedFactor>().map(Self)
+        input.parse::<Factor>().map(Self)
     }
 }
 
-impl quote::ToTokens for OwnedException {
+impl quote::ToTokens for Exception {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let factor = &self.0;
         tokens.extend(quote::quote! {

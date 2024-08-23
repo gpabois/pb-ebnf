@@ -1,13 +1,13 @@
 use crate::{
-    definitions_list::{DefinitionsListRef, OwnedDefinitionsList},
-    meta_identifier::{MetaIdentifier, MetaIdentifierRef, OwnedMetaIdentifier},
-    BoxableSymbolIterator, DefinitionsList, SymbolIterable,
+    definitions_list::{DefinitionsList, DefinitionsListRef},
+    meta_identifier::{MetaIdentifier, MetaIdentifierRef},
+    prelude::*,
 };
 
 /// A production rule.
-pub trait Rule {
-    type Lhs: MetaIdentifier;
-    type Rhs: DefinitionsList;
+pub trait IRule: Clone {
+    type Lhs: IMetaIdentifier;
+    type Rhs: IDefinitionsList;
 
     fn lhs(&self) -> &Self::Lhs;
     fn rhs(&self) -> &Self::Rhs;
@@ -19,7 +19,7 @@ pub struct RuleRef<'a> {
     pub rhs: DefinitionsListRef<'a>,
 }
 
-impl<'a> Rule for RuleRef<'a> {
+impl<'a> IRule for RuleRef<'a> {
     type Lhs = MetaIdentifierRef<'a>;
     type Rhs = DefinitionsListRef<'a>;
 
@@ -32,50 +32,28 @@ impl<'a> Rule for RuleRef<'a> {
     }
 }
 
-impl<'a> SymbolIterable<'a> for &RuleRef<'a> {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        std::iter::once(self.lhs.into())
-            .chain(self.rhs.iter_symbols())
-            .into_boxed_iterator()
-    }
-}
-
 impl<'a> RuleRef<'a> {
     /// Creates a new rule.
     pub const fn new(lhs: MetaIdentifierRef<'a>, rhs: DefinitionsListRef<'a>) -> Self {
         Self { lhs, rhs }
     }
-
-    /// Returns transitive symbols
-    ///
-    /// Transitive symbols are symbols which can directly produce another one.
-    ///
-    /// Example :
-    /// <foo> = [<bar>] <acme>
-    ///
-    /// <acme> on its own produces <foo> as no other mandatory symbols are required.
-    pub fn transitive(&self) -> impl Iterator<Item = &MetaIdentifierRef<'a>> {
-        self.rhs.transitive()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedRule {
-    pub lhs: OwnedMetaIdentifier,
-    pub rhs: OwnedDefinitionsList,
+pub struct Rule {
+    pub lhs: MetaIdentifier,
+    pub rhs: DefinitionsList,
 }
 
-impl<'a> SymbolIterable<'a> for &'a OwnedRule {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        std::iter::once((&self.lhs).into())
-            .chain(self.rhs.iter_symbols())
-            .into_boxed_iterator()
+impl Rule {
+    pub fn new(lhs: MetaIdentifier, rhs: DefinitionsList) -> Self {
+        Self { lhs, rhs }
     }
 }
 
-impl Rule for OwnedRule {
-    type Lhs = OwnedMetaIdentifier;
-    type Rhs = OwnedDefinitionsList;
+impl IRule for Rule {
+    type Lhs = MetaIdentifier;
+    type Rhs = DefinitionsList;
 
     fn lhs(&self) -> &Self::Lhs {
         &self.lhs
@@ -86,15 +64,15 @@ impl Rule for OwnedRule {
     }
 }
 
-impl syn::parse::Parse for OwnedRule {
+impl syn::parse::Parse for Rule {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let lhs = input.parse::<OwnedMetaIdentifier>()?;
+        let lhs = input.parse::<MetaIdentifier>()?;
 
         input
             .parse::<syn::Token![=]>()
             .map_err(|e| syn::Error::new(e.span(), "expecting a = after rule's lhs"))?;
 
-        let rhs = input.parse::<OwnedDefinitionsList>()?;
+        let rhs = input.parse::<DefinitionsList>()?;
 
         input
             .parse::<syn::Token![;]>()
@@ -103,7 +81,7 @@ impl syn::parse::Parse for OwnedRule {
         Ok(Self { lhs, rhs })
     }
 }
-impl quote::ToTokens for OwnedRule {
+impl quote::ToTokens for Rule {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let lhs = &self.lhs;
         let rhs = &self.rhs;

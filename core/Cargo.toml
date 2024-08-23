@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pb-bnf = { git = "https://github.com/gpabois/pb-bnf.git" }
 itertools = "0.13.0"
 phf = { version = "0.11.2", features = ["phf_macros"] }
 proc-macro2 = "1.0.86"

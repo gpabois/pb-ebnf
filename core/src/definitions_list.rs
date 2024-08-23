@@ -1,13 +1,16 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
+
+use pb_bnf::symbol::Symbol;
 
 use crate::{
-    meta_identifier::MetaIdentifierRef,
-    single_definition::{OwnedSingleDefinition, SingleDefinitionRef},
-    BoxableSymbolIterator, SymbolIterable,
+    prelude::*,
+    single_definition::{SingleDefinition, SingleDefinitionRef},
 };
 
-pub trait DefinitionsList: Deref<Target = [Self::SingleDefinition]> {
-    type SingleDefinition;
+pub trait IDefinitionsList: AsRef<[Self::SingleDefinition]> + Clone {
+    type SingleDefinition: ISingleDefinition;
+
+    fn to_owned(self) -> DefinitionsList;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,62 +20,93 @@ impl<'a> DefinitionsListRef<'a> {
     pub const fn new(defs: &'a [SingleDefinitionRef<'a>]) -> Self {
         Self(defs)
     }
-
-    pub fn transitive(&self) -> impl Iterator<Item = &MetaIdentifierRef<'a>> {
-        self.iter().flat_map(SingleDefinitionRef::transitive)
-    }
 }
 
-impl<'a> DefinitionsList for DefinitionsListRef<'a> {
+impl<'a> IDefinitionsList for DefinitionsListRef<'a> {
     type SingleDefinition = SingleDefinitionRef<'a>;
-}
 
-impl<'a> SymbolIterable<'a> for &DefinitionsListRef<'a> {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
-            .iter()
-            .flat_map(|sd| sd.iter_symbols())
-            .into_boxed_iterator()
+    fn to_owned(self) -> DefinitionsList {
+        DefinitionsList(
+            self.0
+                .iter()
+                .copied()
+                .map(ISingleDefinition::to_owned)
+                .collect(),
+        )
     }
 }
 
-impl<'a> Deref for DefinitionsListRef<'a> {
-    type Target = [SingleDefinitionRef<'a>];
-
-    fn deref(&self) -> &Self::Target {
+impl<'a> AsRef<[SingleDefinitionRef<'a>]> for DefinitionsListRef<'a> {
+    fn as_ref(&self) -> &[SingleDefinitionRef<'a>] {
         self.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedDefinitionsList(Vec<OwnedSingleDefinition>);
+pub struct DefinitionsList(Vec<SingleDefinition>);
 
-impl DefinitionsList for OwnedDefinitionsList {
-    type SingleDefinition = OwnedSingleDefinition;
-}
+impl<'a> IterSymbols<'a> for DefinitionsList {
+    type Symbol = Symbol;
+    type Iter = Box<dyn Iterator<Item = &'a Symbol> + 'a>;
 
-impl<'a> SymbolIterable<'a> for &'a OwnedDefinitionsList {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
+    fn iter_symbols(&'a self) -> Self::Iter {
+        let iter = self
             .iter()
-            .flat_map(|sd| sd.iter_symbols())
-            .into_boxed_iterator()
+            .flat_map(|def| def.iter().flat_map(|term| term.iter_symbols()));
+
+        Box::new(iter)
     }
 }
 
-impl Deref for OwnedDefinitionsList {
-    type Target = [OwnedSingleDefinition];
+impl IntoIterator for DefinitionsList {
+    type Item = SingleDefinition;
+
+    type IntoIter = <Vec<SingleDefinition> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl FromIterator<SingleDefinition> for DefinitionsList {
+    fn from_iter<T: IntoIterator<Item = SingleDefinition>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl Deref for DefinitionsList {
+    type Target = Vec<SingleDefinition>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl syn::parse::Parse for OwnedDefinitionsList {
+impl DerefMut for DefinitionsList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl AsRef<[SingleDefinition]> for DefinitionsList {
+    fn as_ref(&self) -> &[SingleDefinition] {
+        self.0.as_slice()
+    }
+}
+
+impl IDefinitionsList for DefinitionsList {
+    type SingleDefinition = SingleDefinition;
+
+    fn to_owned(self) -> DefinitionsList {
+        self
+    }
+}
+
+impl syn::parse::Parse for DefinitionsList {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         use syn::parse::discouraged::Speculative;
 
-        let mut list = vec![input.parse::<OwnedSingleDefinition>()?];
+        let mut list = vec![input.parse::<SingleDefinition>()?];
 
         loop {
             let fork = input.fork();
@@ -81,7 +115,7 @@ impl syn::parse::Parse for OwnedDefinitionsList {
                 break;
             }
 
-            if let Ok(def) = fork.parse::<OwnedSingleDefinition>() {
+            if let Ok(def) = fork.parse::<SingleDefinition>() {
                 list.push(def);
                 input.advance_to(&fork);
             } else {
@@ -92,7 +126,7 @@ impl syn::parse::Parse for OwnedDefinitionsList {
         Ok(Self(list))
     }
 }
-impl quote::ToTokens for OwnedDefinitionsList {
+impl quote::ToTokens for DefinitionsList {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let defs = crate::into_slice(self.0.iter());
         tokens.extend(quote::quote! {

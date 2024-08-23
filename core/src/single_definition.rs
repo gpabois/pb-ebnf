@@ -1,25 +1,15 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use crate::{
-    itertools::Single as _,
-    meta_identifier::MetaIdentifierRef,
-    term::{OwnedTerm, Term, TermRef},
-    BoxableSymbolIterator, Factor, Primary, SymbolIterable,
+    prelude::*,
+    primary::Primary,
+    term::{Term, TermRef},
 };
 
-pub trait SingleDefinition: Deref<Target = [Self::Term]> {
-    type Term: Term;
+pub trait ISingleDefinition: AsRef<[Self::Term]> + Clone {
+    type Term: ITerm;
 
-    fn transitive(
-        &self,
-    ) -> Option<&<<<Self::Term as Term>::Factor as Factor>::Primary as Primary>::MetaIdentifier>
-    {
-        self.iter()
-            .map(|term| term.try_as_meta_identifier())
-            .filter(Option::is_some)
-            .single()
-            .flatten()
-    }
+    fn to_owned(self) -> SingleDefinition;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,76 +21,82 @@ impl<'a> SingleDefinitionRef<'a> {
     }
 }
 
-impl<'a> SingleDefinitionRef<'a> {
-    pub fn transitive(&self) -> Option<&MetaIdentifierRef<'a>> {
-        self.iter()
-            .map(TermRef::try_as_single_symbol)
-            .filter(Option::is_some)
-            .single()
-            .flatten()
-    }
-}
-
-impl<'a> SymbolIterable<'a> for SingleDefinitionRef<'a> {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
-            .iter()
-            .flat_map(|term| term.iter_symbols())
-            .into_boxed_iterator()
-    }
-}
-
-impl<'a> SymbolIterable<'a> for &SingleDefinitionRef<'a> {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
-            .iter()
-            .flat_map(|term| term.iter_symbols())
-            .into_boxed_iterator()
-    }
-}
-
-impl<'a> SingleDefinition for SingleDefinitionRef<'a> {
+impl<'a> ISingleDefinition for SingleDefinitionRef<'a> {
     type Term = TermRef<'a>;
+
+    fn to_owned(self) -> SingleDefinition {
+        SingleDefinition(self.0.iter().copied().map(ITerm::to_owned).collect())
+    }
 }
 
-impl<'a> Deref for SingleDefinitionRef<'a> {
-    type Target = [TermRef<'a>];
-
-    fn deref(&self) -> &Self::Target {
+impl<'a> AsRef<[TermRef<'a>]> for SingleDefinitionRef<'a> {
+    fn as_ref(&self) -> &[TermRef<'a>] {
         self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedSingleDefinition(Vec<OwnedTerm>);
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SingleDefinition(Vec<Term>);
 
-impl<'a> SymbolIterable<'a> for &'a OwnedSingleDefinition {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
-            .iter()
-            .flat_map(|term| term.iter_symbols())
-            .into_boxed_iterator()
+impl SingleDefinition {
+    pub fn push_front(&mut self, term: Term) {
+        self.0.insert(0, term)
+    }
+
+    pub fn empty() -> Self {
+        Self(vec![Term::from(Primary::Empty)])
     }
 }
 
-impl SingleDefinition for OwnedSingleDefinition {
-    type Term = OwnedTerm;
+impl ISingleDefinition for SingleDefinition {
+    type Term = Term;
+
+    fn to_owned(self) -> SingleDefinition {
+        self
+    }
 }
 
-impl Deref for OwnedSingleDefinition {
-    type Target = [OwnedTerm];
+impl AsRef<[Term]> for SingleDefinition {
+    fn as_ref(&self) -> &[Term] {
+        self.0.as_slice()
+    }
+}
+
+impl FromIterator<Term> for SingleDefinition {
+    fn from_iter<T: IntoIterator<Item = Term>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for SingleDefinition {
+    type Item = Term;
+    type IntoIter = <Vec<Term> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl Deref for SingleDefinition {
+    type Target = Vec<Term>;
 
     fn deref(&self) -> &Self::Target {
-        self.0.deref()
+        &self.0
     }
 }
 
-impl syn::parse::Parse for OwnedSingleDefinition {
+impl DerefMut for SingleDefinition {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl syn::parse::Parse for SingleDefinition {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         use syn::parse::discouraged::Speculative as _;
         use syn::Token;
 
-        let mut list = vec![input.parse::<OwnedTerm>()?];
+        let mut list = vec![input.parse::<Term>()?];
 
         loop {
             let fork = input.fork();
@@ -109,7 +105,7 @@ impl syn::parse::Parse for OwnedSingleDefinition {
                 break;
             }
 
-            if let Ok(term) = fork.parse::<OwnedTerm>() {
+            if let Ok(term) = fork.parse::<Term>() {
                 list.push(term);
                 input.advance_to(&fork);
             } else {
@@ -120,7 +116,7 @@ impl syn::parse::Parse for OwnedSingleDefinition {
         Ok(Self(list))
     }
 }
-impl quote::ToTokens for OwnedSingleDefinition {
+impl quote::ToTokens for SingleDefinition {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         use quote::quote;
         let terms = crate::into_slice(self.0.iter());

@@ -1,44 +1,18 @@
-use std::ops::Deref;
-
-use itertools::Itertools;
+use std::ops::{Deref, DerefMut};
 
 use crate::{
     into_slice,
-    rule::{OwnedRule, Rule, RuleRef},
-    BoxableSymbolIterator, SymbolIterable, SymbolRef,
+    rule::{IRule, Rule, RuleRef},
 };
 
-pub trait Syntax: std::ops::Deref<Target = [Self::Rule]> {
-    type Rule: Rule;
-
-    /// Iterate over rules based on its lhs symbol.
-    fn iter_rules_by_symbol<S>(&self, symbol: S) -> impl Iterator<Item = &Self::Rule>
-    where
-        S: Deref<Target = str>,
-    {
-        self.iter()
-            .filter(move |rule| rule.lhs().deref() == symbol.deref())
-    }
-
-    fn is_terminal<S>(&self, symbol: S) -> bool
-    where
-        S: Deref<Target = str>,
-    {
-        !self.is_non_terminal(symbol)
-    }
-
-    fn is_non_terminal<S>(&self, symbol: S) -> bool
-    where
-        S: Deref<Target = str>,
-    {
-        self.iter_rules_by_symbol(symbol).any(|_| true)
-    }
+pub trait ISyntax: AsRef<[Self::Rule]> {
+    type Rule: IRule;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SyntaxRef<'a>(&'a [RuleRef<'a>]);
 
-impl<'a> Syntax for SyntaxRef<'a> {
+impl<'a> ISyntax for SyntaxRef<'a> {
     type Rule = RuleRef<'a>;
 }
 
@@ -46,91 +20,75 @@ impl<'a> SyntaxRef<'a> {
     pub const fn new(rules: &'a [RuleRef<'a>]) -> Self {
         Self(rules)
     }
-
-    pub fn iter_terminals(self) -> impl Iterator<Item = SymbolRef<'a>> {
-        self.iter_symbols()
-            .filter(move |sym| self.is_terminal(*sym))
-            .into_boxed_iterator()
-    }
-
-    pub fn iter_non_terminals(self) -> impl Iterator<Item = SymbolRef<'a>> {
-        self.iter_symbols()
-            .filter(move |sym| self.is_non_terminal(*sym))
-            .into_boxed_iterator()
-    }
 }
 
-impl<'a> SymbolIterable<'a> for SyntaxRef<'a> {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
-            .iter()
-            .flat_map(|rule| rule.iter_symbols())
-            .dedup()
-            .into_boxed_iterator()
-    }
-}
-
-impl<'a> Deref for SyntaxRef<'a> {
-    type Target = [RuleRef<'a>];
-
-    fn deref(&self) -> &Self::Target {
+impl<'a> AsRef<[RuleRef<'a>]> for SyntaxRef<'a> {
+    fn as_ref(&self) -> &[RuleRef<'a>] {
         self.0
     }
 }
 
-#[derive(Default)]
-pub struct OwnedSyntax(Vec<OwnedRule>);
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Syntax(Vec<Rule>);
 
-impl FromIterator<OwnedRule> for OwnedSyntax {
-    fn from_iter<T: IntoIterator<Item = OwnedRule>>(iter: T) -> Self {
+impl IntoIterator for Syntax {
+    type Item = Rule;
+
+    type IntoIter = <Vec<Rule> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        todo!()
+    }
+}
+
+impl FromIterator<Rule> for Syntax {
+    fn from_iter<T: IntoIterator<Item = Rule>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
 }
 
-impl Syntax for OwnedSyntax {
-    type Rule = OwnedRule;
+impl ISyntax for Syntax {
+    type Rule = Rule;
 }
 
-impl OwnedSyntax {
-    pub fn iter_terminals(&self) -> impl Iterator<Item = SymbolRef<'_>> {
-        self.iter_symbols().filter(|sym| self.is_terminal(*sym))
-    }
-
-    pub fn iter_non_terminals(&self) -> impl Iterator<Item = SymbolRef<'_>> {
-        self.iter_symbols().filter(|sym| self.is_non_terminal(*sym))
+impl Syntax {
+    pub fn push(&mut self, rule: Rule) {
+        self.0.push(rule)
     }
 }
 
-impl<'a> SymbolIterable<'a> for &'a OwnedSyntax {
-    fn iter_symbols(self) -> crate::SymbolIterator<'a> {
-        self.0
-            .iter()
-            .flat_map(|rule| rule.iter_symbols())
-            .dedup()
-            .into_boxed_iterator()
-    }
-}
-
-impl Deref for OwnedSyntax {
-    type Target = [OwnedRule];
+impl Deref for Syntax {
+    type Target = Vec<Rule>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl syn::parse::Parse for OwnedSyntax {
+impl DerefMut for Syntax {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl AsRef<[Rule]> for Syntax {
+    fn as_ref(&self) -> &[Rule] {
+        &self.0
+    }
+}
+
+impl syn::parse::Parse for Syntax {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut ls = Vec::<OwnedRule>::default();
+        let mut ls = Vec::<Rule>::default();
 
         while !input.is_empty() {
-            ls.push(input.parse::<OwnedRule>()?);
+            ls.push(input.parse::<Rule>()?);
         }
 
         Ok(Self(ls))
     }
 }
-impl quote::ToTokens for OwnedSyntax {
+impl quote::ToTokens for Syntax {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let rules = into_slice(self.0.iter());
         tokens.extend(quote::quote! {

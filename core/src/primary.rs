@@ -1,11 +1,27 @@
+use std::iter::Once;
+
+use pb_bnf::{prelude::IterSymbols, symbol::Symbol};
+
 use crate::{
-    grouped::{GroupedSequenceRef, OwnedGroupedSequence},
-    literal::{LiteralRef, OwnedLiteral},
-    meta_identifier::{MetaIdentifierRef, OwnedMetaIdentifier},
-    optional::{OptionalSequenceRef, OwnedOptionalSequence},
-    repeated::{OwnedRepeatedSequence, RepeatedSequenceRef},
-    BoxableSymbolIterator, SymbolIterable, SymbolIterator, SymbolRef,
+    grouped::{GroupedSequence, GroupedSequenceRef, IGroupedSequence},
+    literal::{ILiteral, Literal, LiteralRef},
+    meta_identifier::{IMetaIdentifier, MetaIdentifier, MetaIdentifierRef},
+    optional::{IOptionalSequence, OptionalSequence, OptionalSequenceRef},
+    repeated::{IRepeatedSequence, RepeatedSequence, RepeatedSequenceRef},
+    IntoTerm, Term,
 };
+
+pub trait IntoPrimary {
+    type Primary: IPrimary;
+
+    fn into_primary(self) -> Self::Primary;
+}
+
+pub trait AsPrimaryRef {
+    type Primary: IPrimary;
+
+    fn as_primary_ref(&self) -> &Self::Primary;
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimaryKind {
@@ -17,12 +33,12 @@ pub enum PrimaryKind {
     Empty,
 }
 
-pub trait Primary {
-    type OptionalSequence;
-    type RepeatedSequence;
-    type GroupedSequence;
-    type MetaIdentifier;
-    type Literal;
+pub trait IPrimary {
+    type OptionalSequence: IOptionalSequence;
+    type RepeatedSequence: IRepeatedSequence;
+    type GroupedSequence: IGroupedSequence;
+    type MetaIdentifier: IMetaIdentifier;
+    type Literal: ILiteral;
 
     fn try_as_optional(&self) -> Option<&Self::OptionalSequence>;
     fn try_as_repeated(&self) -> Option<&Self::RepeatedSequence>;
@@ -31,6 +47,8 @@ pub trait Primary {
     fn try_as_literal(&self) -> Option<&Self::Literal>;
 
     fn kind(&self) -> PrimaryKind;
+
+    fn to_owned(self) -> Primary;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +61,7 @@ pub enum PrimaryRef<'a> {
     Empty,
 }
 
-impl<'a> Primary for PrimaryRef<'a> {
+impl<'a> IPrimary for PrimaryRef<'a> {
     type OptionalSequence = OptionalSequenceRef<'a>;
     type RepeatedSequence = RepeatedSequenceRef<'a>;
     type GroupedSequence = GroupedSequenceRef<'a>;
@@ -74,7 +92,7 @@ impl<'a> Primary for PrimaryRef<'a> {
         }
     }
 
-    fn try_as_meta_identifier(&self) -> Option<&<PrimaryRef<'a> as Primary>::MetaIdentifier> {
+    fn try_as_meta_identifier(&self) -> Option<&<PrimaryRef<'a> as IPrimary>::MetaIdentifier> {
         if let Self::MetaIdentifier(sym) = &self {
             Some(sym)
         } else {
@@ -82,7 +100,7 @@ impl<'a> Primary for PrimaryRef<'a> {
         }
     }
 
-    fn try_as_literal(&self) -> Option<&<PrimaryRef<'a> as Primary>::Literal> {
+    fn try_as_literal(&self) -> Option<&<PrimaryRef<'a> as IPrimary>::Literal> {
         if let Self::Literal(lit) = &self {
             Some(lit)
         } else {
@@ -100,57 +118,89 @@ impl<'a> Primary for PrimaryRef<'a> {
             PrimaryRef::Empty => PrimaryKind::Empty,
         }
     }
-}
 
-impl<'a> SymbolIterable<'a> for &'a PrimaryRef<'a> {
-    fn iter_symbols(self) -> SymbolIterator<'a> {
+    fn to_owned(self) -> Primary {
         match self {
-            PrimaryRef::Optional(seq) => seq
-                .iter()
-                .flat_map(|sd| sd.iter_symbols())
-                .into_boxed_iterator(),
-            PrimaryRef::Repeated(seq) => seq
-                .iter()
-                .flat_map(|sd| sd.iter_symbols())
-                .into_boxed_iterator(),
-            PrimaryRef::Grouped(seq) => seq
-                .iter()
-                .flat_map(|sd| sd.iter_symbols())
-                .into_boxed_iterator(),
-            PrimaryRef::MetaIdentifier(id) => std::iter::once(SymbolRef::from(*id)).into(),
-            PrimaryRef::Literal(lit) => std::iter::once(SymbolRef::from(*lit)).into(),
-            PrimaryRef::Empty => std::iter::empty().into(),
+            PrimaryRef::Optional(seq) => Primary::Optional(seq.to_owned()),
+            PrimaryRef::Repeated(seq) => Primary::Repeated(seq.to_owned()),
+            PrimaryRef::Grouped(seq) => Primary::Grouped(seq.to_owned()),
+            PrimaryRef::MetaIdentifier(id) => {
+                Primary::MetaIdentifier(IMetaIdentifier::to_owned(id))
+            }
+            PrimaryRef::Literal(lit) => Primary::Literal(ILiteral::to_owned(lit)),
+            PrimaryRef::Empty => Primary::Empty,
         }
     }
 }
 
-impl<'a> PrimaryRef<'a> {
-    #[inline]
-    pub fn try_as_symbol(&self) -> Option<&MetaIdentifierRef<'a>> {
-        if let Self::MetaIdentifier(sym) = &self {
-            Some(sym)
-        } else {
-            None
+pub enum PrimarySymbolIterator<'a> {
+    Once(std::iter::Once<&'a Symbol>),
+}
+
+impl<'a> From<Once<&'a Symbol>> for PrimarySymbolIterator<'a> {
+    fn from(value: Once<&'a Symbol>) -> Self {
+        Self::Once(value)
+    }
+}
+
+impl<'a> Iterator for PrimarySymbolIterator<'a> {
+    type Item = &'a Symbol;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            PrimarySymbolIterator::Once(iter) => iter.next(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OwnedPrimary {
-    Optional(OwnedOptionalSequence),
-    Repeated(OwnedRepeatedSequence),
-    Grouped(OwnedGroupedSequence),
-    MetaIdentifier(OwnedMetaIdentifier),
-    Literal(OwnedLiteral),
+pub enum Primary {
+    Optional(OptionalSequence),
+    Repeated(RepeatedSequence),
+    Grouped(GroupedSequence),
+    MetaIdentifier(MetaIdentifier),
+    Literal(Literal),
     Empty,
 }
 
-impl Primary for OwnedPrimary {
-    type OptionalSequence = OwnedOptionalSequence;
-    type RepeatedSequence = OwnedRepeatedSequence;
-    type GroupedSequence = OwnedGroupedSequence;
-    type MetaIdentifier = OwnedMetaIdentifier;
-    type Literal = OwnedLiteral;
+impl IntoTerm for Primary {
+    type Term = Term;
+
+    fn into_term(self) -> Self::Term {
+        Term::from(self)
+    }
+}
+
+impl From<MetaIdentifier> for Primary {
+    fn from(value: MetaIdentifier) -> Self {
+        Self::MetaIdentifier(value)
+    }
+}
+
+impl<'a> IterSymbols<'a> for Primary {
+    type Symbol = Symbol;
+    type Iter = PrimarySymbolIterator<'a>;
+
+    fn iter_symbols(&'a self) -> Self::Iter {
+        match self {
+            Primary::Optional(_) => todo!(),
+            Primary::Repeated(_) => todo!(),
+            Primary::Grouped(_) => todo!(),
+            Primary::MetaIdentifier(meta) => {
+                PrimarySymbolIterator::from(std::iter::once(meta.as_symbol()))
+            }
+            Primary::Literal(_) => todo!(),
+            Primary::Empty => todo!(),
+        }
+    }
+}
+
+impl IPrimary for Primary {
+    type OptionalSequence = OptionalSequence;
+    type RepeatedSequence = RepeatedSequence;
+    type GroupedSequence = GroupedSequence;
+    type MetaIdentifier = MetaIdentifier;
+    type Literal = Literal;
 
     fn try_as_optional(&self) -> Option<&Self::OptionalSequence> {
         if let Self::Optional(seq) = &self {
@@ -176,7 +226,7 @@ impl Primary for OwnedPrimary {
         }
     }
 
-    fn try_as_meta_identifier(&self) -> Option<&<Self as Primary>::MetaIdentifier> {
+    fn try_as_meta_identifier(&self) -> Option<&<Self as IPrimary>::MetaIdentifier> {
         if let Self::MetaIdentifier(sym) = &self {
             Some(sym)
         } else {
@@ -184,7 +234,7 @@ impl Primary for OwnedPrimary {
         }
     }
 
-    fn try_as_literal(&self) -> Option<&<Self as Primary>::Literal> {
+    fn try_as_literal(&self) -> Option<&<Self as IPrimary>::Literal> {
         if let Self::Literal(lit) = &self {
             Some(lit)
         } else {
@@ -202,63 +252,40 @@ impl Primary for OwnedPrimary {
             Self::Empty => PrimaryKind::Empty,
         }
     }
-}
 
-impl<'a> SymbolIterable<'a> for &'a OwnedPrimary {
-    fn iter_symbols(self) -> SymbolIterator<'a> {
-        match self {
-            OwnedPrimary::Optional(seq) => seq
-                .iter()
-                .flat_map(|sd| sd.iter_symbols())
-                .into_boxed_iterator(),
-            OwnedPrimary::Repeated(seq) => seq
-                .iter()
-                .flat_map(|sd| sd.iter_symbols())
-                .into_boxed_iterator(),
-            OwnedPrimary::Grouped(seq) => seq
-                .iter()
-                .flat_map(|sd| sd.iter_symbols())
-                .into_boxed_iterator(),
-            OwnedPrimary::MetaIdentifier(id) => std::iter::once(SymbolRef::from(id)).into(),
-            OwnedPrimary::Literal(lit) => std::iter::once(SymbolRef::from(lit)).into(),
-            OwnedPrimary::Empty => std::iter::empty().into(),
-        }
+    fn to_owned(self) -> Primary {
+        self
     }
 }
 
-impl syn::parse::Parse for OwnedPrimary {
+impl syn::parse::Parse for Primary {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        use syn::token::{Brace, Bracket, Paren};
-
-        // [
-        if input.peek(Bracket) {
-            input.parse::<OwnedOptionalSequence>().map(Self::Optional)
-        } else if input.peek(Brace) {
-            input.parse::<OwnedRepeatedSequence>().map(Self::Repeated)
-        } else if input.peek(Paren) {
-            input.parse::<OwnedGroupedSequence>().map(Self::Grouped)
-        } else if input.peek(syn::LitStr) || input.peek(syn::LitChar) {
-            input.parse::<OwnedLiteral>().map(Self::Literal)
-        } else if OwnedMetaIdentifier::is_beginning_of_symbol(&input) {
-            input
-                .parse::<OwnedMetaIdentifier>()
-                .map(Self::MetaIdentifier)
+        if OptionalSequence::is_parsable(&input) {
+            input.parse::<OptionalSequence>().map(Self::Optional)
+        } else if RepeatedSequence::is_parsable(&input) {
+            input.parse::<RepeatedSequence>().map(Self::Repeated)
+        } else if GroupedSequence::is_parsable(&input) {
+            input.parse::<GroupedSequence>().map(Self::Grouped)
+        } else if Literal::is_parsable(&input) {
+            input.parse::<Literal>().map(Self::Literal)
+        } else if MetaIdentifier::is_parsable(&input) {
+            input.parse::<MetaIdentifier>().map(Self::MetaIdentifier)
         } else {
             Ok(Self::Empty)
         }
     }
 }
-impl quote::ToTokens for OwnedPrimary {
+impl quote::ToTokens for Primary {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         use quote::quote;
 
         tokens.extend(match &self {
-            OwnedPrimary::Optional(a) => quote! {::pb_ebnf::PrimaryRef::Optional(#a)},
-            OwnedPrimary::Repeated(a) => quote! {::pb_ebnf::PrimaryRef::Repeated(#a)},
-            OwnedPrimary::Grouped(a) => quote! {::pb_ebnf::PrimaryRef::Grouped(#a)},
-            OwnedPrimary::MetaIdentifier(a) => quote! {::pb_ebnf::PrimaryRef::MetaIdentifier(#a)},
-            OwnedPrimary::Literal(a) => quote! {::pb_ebnf::PrimaryRef::Literal(#a)},
-            OwnedPrimary::Empty => quote! {::pb_ebnf::PrimaryRef::Empty},
+            Primary::Optional(a) => quote! {::pb_ebnf::PrimaryRef::Optional(#a)},
+            Primary::Repeated(a) => quote! {::pb_ebnf::PrimaryRef::Repeated(#a)},
+            Primary::Grouped(a) => quote! {::pb_ebnf::PrimaryRef::Grouped(#a)},
+            Primary::MetaIdentifier(a) => quote! {::pb_ebnf::PrimaryRef::MetaIdentifier(#a)},
+            Primary::Literal(a) => quote! {::pb_ebnf::PrimaryRef::Literal(#a)},
+            Primary::Empty => quote! {::pb_ebnf::PrimaryRef::Empty},
         })
     }
 }

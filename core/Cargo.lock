@@ -18,10 +18,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "pb-bnf"
+version = "0.1.0"
+source = "git+https://github.com/gpabois/pb-bnf.git#b73736851e5421a44959f114a44e04476af01c41"
+dependencies = [
+ "pb-bnf-core",
+]
+
+[[package]]
+name = "pb-bnf-core"
+version = "0.1.0"
+source = "git+https://github.com/gpabois/pb-bnf.git#b73736851e5421a44959f114a44e04476af01c41"
+dependencies = [
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "pb-ebnf-core"
 version = "0.1.0"
 dependencies = [
  "itertools",
+ "pb-bnf",
  "phf",
  "proc-macro2",
  "quote",
@@ -81,9 +101,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.36"
+version = "1.0.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fa76aaf39101c457836aec0ce2316dbdc3ab723cdda1c6bd4e6ad4208acaca7"
+checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
 dependencies = [
  "proc-macro2",
 ]
@@ -111,9 +131,9 @@ checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
 
 [[package]]
 name = "syn"
-version = "2.0.74"
+version = "2.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fceb41e3d546d0bd83421d3409b1460cc7444cd389341a4c880fe7a042cb3d7"
+checksum = "f6af063034fc1935ede7be0122941bafa9bacb949334d090b77ca98b5817c7d9"
 dependencies = [
  "proc-macro2",
  "quote",

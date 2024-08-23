@@ -1,14 +1,14 @@
+use crate::{
+    primary::{IPrimary, Primary, PrimaryRef},
+    AsPrimaryRef, IntoPrimary,
+};
 use std::ops::Deref;
 
-use crate::{
-    meta_identifier::MetaIdentifierRef,
-    primary::{OwnedPrimary, Primary, PrimaryRef},
-};
-
-pub trait Factor: Deref<Target = Self::Primary> {
-    type Primary: Primary;
+pub trait IFactor: Deref<Target = Self::Primary> {
+    type Primary: IPrimary;
 
     fn get_repetition(&self) -> Option<u32>;
+    fn to_owned(self) -> Factor;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,11 +25,24 @@ impl<'a> Deref for FactorRef<'a> {
     }
 }
 
-impl<'a> Factor for FactorRef<'a> {
+impl<'a> AsRef<PrimaryRef<'a>> for FactorRef<'a> {
+    fn as_ref(&self) -> &PrimaryRef<'a> {
+        &self.primary
+    }
+}
+
+impl<'a> IFactor for FactorRef<'a> {
     type Primary = PrimaryRef<'a>;
 
     fn get_repetition(&self) -> Option<u32> {
         self.repetition
+    }
+
+    fn to_owned(self) -> Factor {
+        Factor {
+            primary: self.primary.to_owned(),
+            repetition: self.repetition,
+        }
     }
 }
 
@@ -40,38 +53,66 @@ impl<'a> FactorRef<'a> {
             repetition,
         }
     }
-
-    pub fn try_as_single_symbol(&self) -> Option<&MetaIdentifierRef<'a>> {
-        self.repetition
-            .is_none()
-            .then(|| self.primary.try_as_symbol())
-            .flatten()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedFactor {
-    pub primary: OwnedPrimary,
+pub struct Factor {
+    pub primary: Primary,
     pub repetition: Option<u32>,
 }
 
-impl Deref for OwnedFactor {
-    type Target = OwnedPrimary;
+impl AsPrimaryRef for Factor {
+    type Primary = Primary;
+
+    fn as_primary_ref(&self) -> &Self::Primary {
+        &self.primary
+    }
+}
+
+impl IntoPrimary for Factor {
+    type Primary = Primary;
+
+    fn into_primary(self) -> Self::Primary {
+        self.primary
+    }
+}
+
+impl From<Primary> for Factor {
+    fn from(value: Primary) -> Self {
+        Self {
+            primary: value,
+            repetition: None,
+        }
+    }
+}
+
+impl Deref for Factor {
+    type Target = Primary;
 
     fn deref(&self) -> &Self::Target {
         &self.primary
     }
 }
 
-impl Factor for OwnedFactor {
-    type Primary = OwnedPrimary;
+impl AsRef<Primary> for Factor {
+    fn as_ref(&self) -> &Primary {
+        &self.primary
+    }
+}
+
+impl IFactor for Factor {
+    type Primary = Primary;
 
     fn get_repetition(&self) -> Option<u32> {
         self.repetition
     }
+
+    fn to_owned(self) -> Factor {
+        self
+    }
 }
 
-impl syn::parse::Parse for OwnedFactor {
+impl syn::parse::Parse for Factor {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         use syn::Token;
 
@@ -83,13 +124,13 @@ impl syn::parse::Parse for OwnedFactor {
             None
         };
 
-        input.parse::<OwnedPrimary>().map(move |primary| Self {
+        input.parse::<Primary>().map(move |primary| Self {
             repetition,
             primary,
         })
     }
 }
-impl quote::ToTokens for OwnedFactor {
+impl quote::ToTokens for Factor {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         use quote::quote;
         let repetition = self

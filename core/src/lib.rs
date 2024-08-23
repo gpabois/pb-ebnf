@@ -1,5 +1,6 @@
 mod itertools;
 
+pub mod bnf;
 pub mod definitions_list;
 pub mod exception;
 pub mod factor;
@@ -12,7 +13,6 @@ pub mod primary;
 pub mod repeated;
 pub mod rule;
 pub mod single_definition;
-pub mod symbol;
 pub mod syntax;
 pub mod term;
 
@@ -27,9 +27,15 @@ pub use primary::*;
 pub use repeated::*;
 pub use rule::*;
 pub use single_definition::*;
-pub use symbol::*;
 pub use syntax::*;
 pub use term::*;
+
+pub mod symbol {
+    pub use pb_bnf::symbol::{Symbol, SymbolRef};
+    pub type StaticSymbol = SymbolRef<'static>;
+}
+
+pub use symbol::*;
 
 pub type StaticSyntax = SyntaxRef<'static>;
 
